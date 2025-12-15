@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import ReactButton from "./ReactButton";
 import { ToastContainer, toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
 
 const Manager = () => {
   const [show, setShow] = useState(false);
@@ -11,7 +12,9 @@ const Manager = () => {
   const [editId, setEditId] = useState(null);
   const [buttonText, setButtonText] = useState("Save");
 
-  const BASE_URL = "http://localhost:3000"; // your backend URL
+  const BASE_URL = "http://localhost:3000";
+  const navigate = useNavigate();
+  const userEmail = localStorage.getItem("userEmail");
 
   const savePassToast = () => toast("Password saved successfully!");
 
@@ -28,12 +31,25 @@ const Manager = () => {
     setTimeout(() => setCopyToast(""), 2000);
   };
 
-  // Fetch all passwords from backend
+  // Redirect to login if user not logged in
+  useEffect(() => {
+    if (!userEmail) navigate("/Login");
+  }, [userEmail, navigate]);
+
+  // Fetch passwords for logged-in user
   const fetchPasswords = async () => {
+    if (!userEmail) return;
+
     try {
-      const res = await fetch(`${BASE_URL}/`);
-      const data = await res.json();
-      setPasswordArray(data);
+      const res = await fetch(`${BASE_URL}/`, {
+        headers: { "Content-Type": "application/json", userid: userEmail },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPasswordArray(data);
+      } else {
+        console.error("Failed to fetch passwords:", await res.json());
+      }
     } catch (err) {
       console.error("Error fetching passwords:", err);
     }
@@ -41,7 +57,7 @@ const Manager = () => {
 
   useEffect(() => {
     fetchPasswords();
-  }, []);
+  }, [userEmail]);
 
   // Save or update password
   const savePassword = async () => {
@@ -51,27 +67,25 @@ const Manager = () => {
     }
 
     try {
-      if (editId) {
-        // Update password
-        await fetch(`${BASE_URL}/${editId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
+      const method = editId ? "PUT" : "POST";
+      const url = editId ? `${BASE_URL}/${editId}` : `${BASE_URL}/`;
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json", userid: userEmail },
+        body: JSON.stringify(form),
+      });
+
+      if (res.ok) {
         savePassToast();
+        setForm({ site: "", username: "", password: "" });
+        setEditId(null);
+        setButtonText("Save");
+        fetchPasswords();
       } else {
-        // Add new password
-        await fetch(`${BASE_URL}/`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
-        savePassToast();
+        const errorData = await res.json();
+        alert(errorData.message || "Error saving password");
       }
-      setForm({ site: "", username: "", password: "" });
-      setEditId(null);
-      setButtonText("Save");
-      fetchPasswords(); // refresh list
     } catch (err) {
       console.error("Error saving password:", err);
     }
@@ -83,16 +97,21 @@ const Manager = () => {
       username: item.username,
       password: item.password,
     });
-    setEditId(item._id); // use MongoDB _id
+    setEditId(item._id);
     setButtonText("Update");
   };
 
   const deletePassword = async (id) => {
-    const dec = confirm("Do you want to delete?");
-    if (!dec) return;
+    const confirmDelete = window.confirm("Do you want to delete?");
+    if (!confirmDelete) return;
+
     try {
-      await fetch(`${BASE_URL}/${id}`, { method: "DELETE" });
-      fetchPasswords();
+      const res = await fetch(`${BASE_URL}/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", userid: userEmail },
+      });
+      if (res.ok) fetchPasswords();
+      else alert("Failed to delete password");
     } catch (err) {
       console.error("Error deleting password:", err);
     }
@@ -102,12 +121,12 @@ const Manager = () => {
     <>
       <ToastContainer />
 
-      {/* Background & Heading remain the same */}
+      {/* Background & Heading */}
       <div className="absolute inset-0 -z-10 h-full w-full bg-green-50 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-size-[14px_24px]">
         <div className="absolute left-0 right-0 top-0 -z-10 m-auto h-[310px] w-[310px] rounded-full bg-fuchsia-200 opacity-20 blur-[100px]"></div>
       </div>
 
-      <div className="flex flex-row justify-center items-center gap-1 p-4">
+      <div className="flex flex-row justify-center items-center gap-2 p-4">
         <h1 className="font-extrabold text-3xl text-black text-outline">
           Password
         </h1>
@@ -127,8 +146,7 @@ const Manager = () => {
           onChange={(e) => setForm({ ...form, site: e.target.value })}
           placeholder="https://example.com/"
           autoComplete="website"
-          className="border-green-500 p-2 rounded-full bg-slate-100 border w-full
-          focus:outline-none focus:ring-2 focus:ring-blue-400 hover:border-blue-400"
+          className="border-green-500 p-2 rounded-full bg-slate-100 border w-full focus:outline-none focus:ring-2 focus:ring-blue-400 hover:border-blue-400"
         />
         <input
           type="text"
@@ -136,8 +154,7 @@ const Manager = () => {
           onChange={(e) => setForm({ ...form, username: e.target.value })}
           placeholder="Username or XYZ@gmail.com"
           autoComplete="username"
-          className="border-green-500 p-2 rounded-full bg-slate-100 border w-full
-          focus:outline-none focus:ring-2 focus:ring-blue-400 hover:border-blue-400"
+          className="border-green-500 p-2 rounded-full bg-slate-100 border w-full focus:outline-none focus:ring-2 focus:ring-blue-400 hover:border-blue-400"
         />
         <div className="relative w-full">
           <input
@@ -146,8 +163,7 @@ const Manager = () => {
             onChange={(e) => setForm({ ...form, password: e.target.value })}
             placeholder="Password"
             autoComplete="current-password"
-            className="border-green-500 p-2 rounded-full bg-slate-100 border w-full
-            focus:outline-none focus:ring-2 focus:ring-blue-400 hover:border-blue-400 pr-10"
+            className="border-green-500 p-2 rounded-full bg-slate-100 border w-full focus:outline-none focus:ring-2 focus:ring-blue-400 hover:border-blue-400 pr-10"
           />
           <img
             src={show ? "./eye.png" : "./hidden.png"}
@@ -250,7 +266,7 @@ const Manager = () => {
                       </span>
                     </td>
                     <td className="border border-white px-2 py-1 ">
-                      <div className="flex justify-center">
+                      <div className="flex justify-center gap-2">
                         <button
                           className="flex cursor-pointer items-center gap-2 hover:bg-yellow-300
                           text-black px-3 py-1.5 rounded-lg transition-all shadow-sm hover:shadow 
