@@ -70,7 +70,6 @@ async function startServer() {
     app.post("/login", async (req, res) => {
       try {
         const { email, password } = req.body;
-
         const user = await usersCollection.findOne({ email });
         if (!user) return res.status(404).json({ message: "User not found" });
 
@@ -79,7 +78,7 @@ async function startServer() {
           return res.status(401).json({ message: "Incorrect password" });
 
         const token = jwt.sign({ email: user.email }, process.env.JWT_SECRET, {
-          expiresIn: "7d",
+          expiresIn: "1d",
         });
 
         res.json({ message: "Login successful", token });
